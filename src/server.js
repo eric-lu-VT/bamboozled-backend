@@ -3,6 +3,7 @@ import express from 'express';
 import bodyParser from 'body-parser';
 import morgan from 'morgan';
 import mongoose from 'mongoose';
+import socketIo from 'socket.io';
 
 import { validationErrorHandler } from 'validation';
 import { errorHandler } from 'errors';
@@ -18,7 +19,7 @@ require('dotenv').config();
 const app = express();
 
 // enable/disable cross origin resource sharing if necessary
-app.use(cors());
+app.use(cors({ credentials: true, origin: process.env.ORIGIN }));
 
 // enable/disable http request logging
 if (process.env.NODE_ENV !== 'test') app.use(morgan('dev'));
@@ -70,4 +71,21 @@ mongoose.Promise = global.Promise;
 // =============================================================================
 const server = app.listen(constants.PORT);
 if (process.env.NODE_ENV !== 'test') console.log(`listening on: ${constants.PORT}`);
+
+// start socket
+const io = socketIo(server);
+
+// Add messages when sockets open and close connections
+io.on('connection', (socket) => {
+  console.log(`[${socket.id}] socket connected`);
+  socket.on('disconnect', (reason) => {
+    console.log(`[${socket.id}] socket disconnected - ${reason}`);
+  });
+});
+
+// Broadcast the current server time as global message, every 1s
+setInterval(() => {
+  io.sockets.emit('time-msg', { time: new Date().toISOString() });
+}, 1000);
+
 export default server;
