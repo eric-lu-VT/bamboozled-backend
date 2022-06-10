@@ -1,3 +1,5 @@
+import { gameService } from 'services';
+
 function makeGameId(length) {
   let str = '';
   const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
@@ -13,6 +15,7 @@ export const createGame = async (socket, req) => {
   const res = {
     gameId
   };
+  await gameService.createGame(gameId);
   console.log(res);
 
   socket.emit('createGame', res);
