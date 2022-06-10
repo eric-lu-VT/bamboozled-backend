@@ -10,6 +10,7 @@ import { errorHandler } from 'errors';
 import {
   authRouter, userRouter, resourceRouter,
 } from './routers';
+import { gameController } from './routers/game_router';
 
 import * as constants from './helpers/constants';
 
@@ -75,11 +76,20 @@ if (process.env.NODE_ENV !== 'test') console.log(`listening on: ${constants.PORT
 // start socket
 const io = socketIo(server);
 
+app.use((req, res, next) => {
+  req.io = io;
+  next();
+});
+
 // Add messages when sockets open and close connections
 io.on('connection', (socket) => {
   console.log(`[${socket.id}] socket connected`);
   socket.on('disconnect', (reason) => {
     console.log(`[${socket.id}] socket disconnected - ${reason}`);
+  });
+
+  socket.on('gameAction', (req) => {
+    gameController(socket, req);
   });
 });
 
