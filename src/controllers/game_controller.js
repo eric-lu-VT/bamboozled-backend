@@ -1,22 +1,18 @@
 import { gameService } from 'services';
 
-function makeGameId(length) {
-  let str = '';
-  const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-  for (let i = 0; i < length; i += 1) {
-    str += characters.charAt(Math.floor(Math.random() * characters.length));
-  }
-  return str;
-}
-
-export const createGame = async (socket, req) => {
-  const gameId = makeGameId(4);
-
-  const res = {
-    gameId
-  };
-  await gameService.createGame(gameId);
-  console.log(res);
-
+const createGame = async (socket, req) => {
+  const res = await gameService.createGame(req);
   socket.emit('createGame', res);
 };
+
+const joinGame = async (socket, req) => {
+  const res = await gameService.joinGame(req);
+  socket.emit('joinGame', res);
+};
+
+const gameController = {
+  createGame,
+  joinGame
+};
+
+export default gameController;
