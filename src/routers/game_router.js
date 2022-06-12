@@ -1,9 +1,12 @@
-import { createGame } from '../controllers/game_controller';
+import gameController from '../controllers/game_controller';
 
-export const gameController = async (socket, req) => {
+export const gameRouter = async (socket, req) => {
   switch (req.url) {
     case 'create_game':
-      await createGame(socket, req);
+      await gameController.createGame(socket, req);
+      break;
+    case 'join_game':
+      await gameController.joinGame(socket, req);
       break;
     default:
       break;
