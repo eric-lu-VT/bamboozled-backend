@@ -1,112 +1,80 @@
 import redisClient from '../redis';
 
-function makeGameId(length) {
-  let str = '';
-  const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-  for (let i = 0; i < length; i += 1) {
-    str += characters.charAt(Math.floor(Math.random() * characters.length));
-  }
-  return str;
-}
-
-const createGame = async (req) => {
-  const gameId = makeGameId(4);
-
+const updateGame = async (
+  gameId,
+  active,
+  hostId,
+  clients,
+  turnIdx,
+  reportedRoll,
+  actualRoll,
+  currentPlayer,
+  prevPlayer,
+  MIN_NUM_PLAYERS,
+  MAX_NUM_PLAYERS,
+  pressedOk
+) => {
   await redisClient.hset(gameId, {
     gameId,
-    active: 'false',
-    hostId: req.id,
-    clients: JSON.stringify([req.id]),
-    turnIdx: '0',
-    reportedRoll: '0',
-    actualRoll: '0',
-    currentPlayer: '',
-    prevPlayer: '',
-    MIN_NUM_PLAYERS: '1',
-    MAX_NUM_PLAYERS: '8',
-    pressedOk: '0'
+    active,
+    hostId,
+    clients: JSON.stringify(clients),
+    turnIdx,
+    reportedRoll,
+    actualRoll,
+    currentPlayer,
+    prevPlayer,
+    MIN_NUM_PLAYERS,
+    MAX_NUM_PLAYERS,
+    pressedOk,
   });
-
-  await redisClient.hset(req.id, {
-    gameId,
-    clientName: req.username,
-    lives: '0',
-    alive: 'false'
-  });
-
-  return {
-    gameId,
-    active: false,
-    lives: 0,
-    alive: false,
-  };
 };
 
-const joinGame = async (req) => {
-  if (await redisClient.exists(req.gameId) === 0) {
-    return {
-      success: false
-    };
-  }
-  const gameData = await redisClient.hgetall(req.gameId);
+const getGame = async (gameId) => {
+  const gameData = await redisClient.hgetall(gameId);
+  gameData.active = (gameData.active === 'true');
   gameData.clients = JSON.parse(gameData.clients);
+  gameData.turnIdx = parseInt(gameData.turnIdx, 10);
+  gameData.reportedRoll = parseInt(gameData.reportedRoll, 10);
+  gameData.actualRoll = parseInt(gameData.actualRoll, 10);
+  gameData.MIN_NUM_PLAYERS = parseInt(gameData.MIN_NUM_PLAYERS, 10);
+  gameData.MAX_NUM_PLAYERS = parseInt(gameData.MAX_NUM_PLAYER, 10);
+  gameData.pressedOk = parseInt(gameData.pressedOk, 10);
 
-  if (gameData.active === 'true'
-    || parseInt(gameData.MAX_NUM_PLAYERS, 10) >= gameData.clients.length
-    || gameData.clients.includes(req.id)
-  ) {
-    if (gameData.clients.includes(req.id)) {
-      const userData = await redisClient.hgetall(req.id);
+  return gameData;
+};
 
-      return {
-        success: true,
-        gameId: req.gameId,
-        active: gameData.active === 'true',
-        lives: parseInt(userData.lives, 10),
-        alive: userData.alive === 'true',
-      };
-    // eslint-disable-next-line no-else-return
-    } else {
-      return {
-        success: false,
-      };
-    }
-  }
+const existsGame = async (gameId) => await redisClient.exists(gameId) === 1;
 
-  await redisClient.hset(req.gameId, {
-    gameId: gameData.gameId,
-    active: gameData.active,
-    hostId: gameData.hostId,
-    clients: JSON.stringify(gameData.clients.push(req.id)),
-    turnIdx: gameData.turnIdx,
-    reportedRoll: gameData.reportedRoll,
-    actualRoll: gameData.actualRoll,
-    currentPlayer: gameData.currentPlayer,
-    prevPlayer: gameData.prevPlayer,
-    MIN_NUM_PLAYERS: gameData.MIN_NUM_PLAYERS,
-    MAX_NUM_PLAYERS: gameData.MAX_NUM_PLAYERS,
-    pressedOk: gameData.pressedOk,
+const updateUser = async (
+  id,
+  username,
+  gameId,
+  lives,
+  alive
+) => {
+  await redisClient.hset(id, {
+    gameId,
+    username,
+    lives,
+    alive,
   });
+};
 
-  await redisClient.hset(req.id, {
-    gameId: req.gameId,
-    clientName: req.username,
-    lives: '0',
-    alive: 'false'
-  });
+const getUser = async (id) => {
+  const userData = await redisClient.hgetall(id);
+  userData.lives = parseInt(userData.lives, 10);
+  userData.alive = (userData.alive === 'true');
 
-  return {
-    success: true,
-    gameId: req.gameId,
-    active: false,
-    lives: 0,
-    alive: false,
-  };
+  return userData;
 };
 
 const gameService = {
-  createGame,
-  joinGame
+  updateGame,
+  getGame,
+  existsGame,
+  updateUser,
+  getUser,
 };
 
 export default gameService;
