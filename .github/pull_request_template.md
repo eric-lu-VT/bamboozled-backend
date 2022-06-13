@@ -21,8 +21,3 @@ One to two sentence description.
 ## Screenshots/Screen Recordings
 
 Please attach screenshots or screen recordings if you made a UI change.
-
-## Suggested Reviewers
-
-- Adam McQuilkin (dev mentor)
-- Alejandro Lopez
