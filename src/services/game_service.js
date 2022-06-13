@@ -38,9 +38,8 @@ const getGame = async (gameId) => {
   gameData.reportedRoll = parseInt(gameData.reportedRoll, 10);
   gameData.actualRoll = parseInt(gameData.actualRoll, 10);
   gameData.MIN_NUM_PLAYERS = parseInt(gameData.MIN_NUM_PLAYERS, 10);
-  gameData.MAX_NUM_PLAYERS = parseInt(gameData.MAX_NUM_PLAYER, 10);
+  gameData.MAX_NUM_PLAYERS = parseInt(gameData.MAX_NUM_PLAYERS, 10);
   gameData.pressedOk = parseInt(gameData.pressedOk, 10);
-
   return gameData;
 };
 
@@ -69,12 +68,30 @@ const getUser = async (id) => {
   return userData;
 };
 
+const getClientInfo = async (gameId) => {
+  const clients = await JSON.parse(await redisClient.hget(gameId, 'clients'));
+  const res = {};
+
+  await Promise.all(clients.map(async (userId) => { // might be anti-pattern?
+    await getUser(userId).then((userData) => {
+      res[userId] = {
+        username: userData.username,
+        lives: userData.lives,
+        alive: userData.alive
+      };
+    });
+  }));
+
+  return res;
+};
+
 const gameService = {
   updateGame,
   getGame,
   existsGame,
   updateUser,
   getUser,
+  getClientInfo,
 };
 
 export default gameService;

@@ -16,7 +16,7 @@ const createGame = async (socket, req) => {
     gameId, // gameId
     'false', // active
     req.id, // hostId
-    JSON.stringify([req.id]), // clients
+    [req.id], // clients
     '0', // turnIdx
     '0', // reportedRoll
     '0', // actualRoll
@@ -34,13 +34,17 @@ const createGame = async (socket, req) => {
     false // alive
   );
 
-  console.log('here');
   socket.join(gameId);
   socket.emit('createGame', {
     gameId,
     active: false,
-    lives: 0,
-    alive: false,
+    clients: {
+      [req.id]: {
+        username: req.username,
+        lives: 0,
+        alive: false,
+      }
+    }
   });
 };
 
@@ -52,21 +56,19 @@ const joinGame = async (socket, req) => {
     return;
   }
   const gameData = await gameService.getGame(req.gameId);
+  let clientInfo = await gameService.getClientInfo(req.gameId);
 
   if (gameData.active === 'true'
-    || gameData.MAX_NUM_PLAYERS >= gameData.clients.length
+    || gameData.MAX_NUM_PLAYERS <= gameData.clients.length
     || gameData.clients.includes(req.id)
   ) {
     if (gameData.clients.includes(req.id)) {
-      const userData = await gameService.getUser(req.id);
-
       socket.join(req.gameId);
       socket.emit('joinGame', {
         success: true,
         gameId: req.gameId,
         active: gameData.active,
-        lives: userData.lives,
-        alive: userData.alive
+        clients: clientInfo
       });
     } else {
       socket.emit('joinGame', {
@@ -80,7 +82,7 @@ const joinGame = async (socket, req) => {
     gameData.gameId,
     gameData.active,
     gameData.hostId,
-    gameData.clients.push(req.id),
+    gameData.clients = gameData.clients.concat([req.id]),
     gameData.turnIdx,
     gameData.reportedRoll,
     gameData.actualRoll,
@@ -99,13 +101,14 @@ const joinGame = async (socket, req) => {
     false // alive
   );
 
+  clientInfo = await gameService.getClientInfo(req.gameId);
+
   socket.join(req.gameId);
   socket.emit('joinGame', {
     success: true,
     gameId: req.gameId,
     active: false,
-    lives: 0,
-    alive: false,
+    clients: clientInfo
   });
 };
 
