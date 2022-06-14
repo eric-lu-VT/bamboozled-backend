@@ -5,6 +5,8 @@ const updateGame = async (
   active,
   hostId,
   clients,
+  alivePlayers,
+  deadPlayers,
   turnIdx,
   reportedRoll,
   dice1,
@@ -22,6 +24,8 @@ const updateGame = async (
     active,
     hostId,
     clients: JSON.stringify(clients),
+    alivePlayers: JSON.stringify(alivePlayers),
+    deadPlayers: JSON.stringify(deadPlayers),
     turnIdx,
     reportedRoll,
     dice1,
@@ -40,6 +44,8 @@ const getGame = async (gameId) => {
   const gameData = await redisClient.hgetall(gameId);
   gameData.active = (gameData.active === 'true');
   gameData.clients = JSON.parse(gameData.clients);
+  gameData.alivePlayers = JSON.parse(gameData.alivePlayers);
+  gameData.deadPlayers = JSON.parse(gameData.deadPlayers);
   gameData.turnIdx = parseInt(gameData.turnIdx, 10);
   gameData.reportedRoll = parseInt(gameData.reportedRoll, 10);
   gameData.dice1 = parseInt(gameData.dice1, 10);
@@ -75,7 +81,7 @@ const getUser = async (id) => {
   return userData;
 };
 
-const getClientInfo = async (gameId) => {
+const getClientInfo = async (gameId) => { // gets ALL client info in a given game
   const clients = await JSON.parse(await redisClient.hget(gameId, 'clients'));
   const res = {};
 

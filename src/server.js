@@ -90,7 +90,7 @@ io.on('connection', (socket) => {
   });
 
   socket.on('gameAction', (req) => {
-    gameRouter(socket, req);
+    gameRouter(socket, io, req);
   });
 });
 
