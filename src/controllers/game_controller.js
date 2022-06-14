@@ -216,7 +216,7 @@ const nextRound = async (socket, io, req) => {
 
   await gameService.updateGame(
     gameData.gameId,
-    gameData.active = true,
+    gameData.active,
     gameData.hostId,
     gameData.clients,
     gameData.alivePlayers,
@@ -253,11 +253,60 @@ const nextRound = async (socket, io, req) => {
   });
 };
 
+const rollDice = async (socket, io, req) => {
+  if (!await gameService.existsGame(req.gameId)) {
+    socket.emit('rollDice', {
+      success: false
+    });
+    return;
+  }
+
+  const gameData = await gameService.getGame(req.gameId);
+  if (req.id !== gameData.currentPlayerId) {
+    socket.emit('rollDice', {
+      success: false
+    });
+    return;
+  }
+
+  await gameService.updateGame(
+    gameData.gameId,
+    gameData.active,
+    gameData.hostId,
+    gameData.clients,
+    gameData.alivePlayers,
+    gameData.deadPlayers,
+    gameData.turnIdx,
+    gameData.reportedRoll,
+    gameData.dice1 = Math.ceil(Math.random() * 6),
+    gameData.dice2 = Math.ceil(Math.random() * 6),
+    gameData.currentPlayerId,
+    gameData.prevPlayerId,
+    gameData.MIN_NUM_PLAYERS,
+    gameData.MAX_NUM_PLAYERS,
+    gameData.curStage = 'after-roll-stage',
+    gameData.turnResult,
+    gameData.pressedOk,
+  );
+  socket.emit('rollDice', {
+    success: true,
+    dice1: gameData.dice1,
+    dice2: gameData.dice2,
+    curStage: gameData.curStage
+  });
+  gameData.clients.forEach((id) => {
+    socket.to(id).emit('rollDiceOther', {
+      curStage: gameData.curStage
+    });
+  });
+};
+
 const gameController = {
   createGame,
   joinGame,
   initGame,
   nextRound,
+  rollDice,
 };
 
 export default gameController;
