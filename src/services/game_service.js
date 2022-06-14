@@ -7,11 +7,14 @@ const updateGame = async (
   clients,
   turnIdx,
   reportedRoll,
-  actualRoll,
-  currentPlayer,
-  prevPlayer,
+  dice1,
+  dice2,
+  currentPlayerId,
+  prevPlayerId,
   MIN_NUM_PLAYERS,
   MAX_NUM_PLAYERS,
+  curStage,
+  turnResult,
   pressedOk
 ) => {
   await redisClient.hset(gameId, {
@@ -21,11 +24,14 @@ const updateGame = async (
     clients: JSON.stringify(clients),
     turnIdx,
     reportedRoll,
-    actualRoll,
-    currentPlayer,
-    prevPlayer,
+    dice1,
+    dice2,
+    currentPlayerId,
+    prevPlayerId,
     MIN_NUM_PLAYERS,
     MAX_NUM_PLAYERS,
+    curStage,
+    turnResult,
     pressedOk,
   });
 };
@@ -36,7 +42,8 @@ const getGame = async (gameId) => {
   gameData.clients = JSON.parse(gameData.clients);
   gameData.turnIdx = parseInt(gameData.turnIdx, 10);
   gameData.reportedRoll = parseInt(gameData.reportedRoll, 10);
-  gameData.actualRoll = parseInt(gameData.actualRoll, 10);
+  gameData.dice1 = parseInt(gameData.dice1, 10);
+  gameData.dice2 = parseInt(gameData.dice2, 10);
   gameData.MIN_NUM_PLAYERS = parseInt(gameData.MIN_NUM_PLAYERS, 10);
   gameData.MAX_NUM_PLAYERS = parseInt(gameData.MAX_NUM_PLAYERS, 10);
   gameData.pressedOk = parseInt(gameData.pressedOk, 10);
