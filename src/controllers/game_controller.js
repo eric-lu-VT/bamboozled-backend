@@ -13,6 +13,15 @@ function floorMod(n, m) {
   return Math.floor(((n % m) + m) % m);
 }
 
+function compareRoll(d1, d2, rd1, rd2) {
+  if (d1 < 0 || d1 > 6 || d2 < 0 || d2 > 6) return false;
+  if (d1 === 2 && d2 === 1) return true;
+  if (rd1 === rd2) {
+    return (d1 === d2) && (d1 >= rd1);
+  }
+  return (10 * d1 + d2 >= 10 * rd1 + rd2);
+}
+
 const createGame = async (socket, io, req) => {
   const gameId = makeGameId(4);
 
@@ -24,7 +33,8 @@ const createGame = async (socket, io, req) => {
     [], // alivePlayers
     [], // deadPlayers
     '0', // turnIdx
-    '0', // reportedRoll
+    '1', // reportedDice1,
+    '2', // reportedDice2,
     '0', // dice1,
     '0', // dice2
     '', // currentPlayer
@@ -86,7 +96,8 @@ const joinGame = async (socket, io, req) => {
         clients: clientInfo,
         currentPlayerId: gameData.currentPlayerId,
         prevPlayerId: gameData.prevPlayerId,
-        reportedRoll: gameData.reportedRoll,
+        reportedDice1: gameData.reportedDice1,
+        reportedDice2: gameData.reportedDice2,
         dice1: gameData.dice1,
         dice2: gameData.dice2,
         curStage: gameData.curStage,
@@ -108,7 +119,8 @@ const joinGame = async (socket, io, req) => {
       gameData.alivePlayers,
       gameData.deadPlayers,
       gameData.turnIdx,
-      gameData.reportedRoll,
+      gameData.reportedDice1,
+      gameData.reportedDice2,
       gameData.dice1,
       gameData.dice2,
       gameData.currentPlayerId,
@@ -172,7 +184,8 @@ const initGame = async (socket, io, req) => {
     gameData.alivePlayers = gameData.clients,
     gameData.deadPlayers,
     gameData.turnIdx = Math.floor(Math.random() * gameData.alivePlayers.length),
-    gameData.reportedRoll = 0,
+    gameData.reportedDice1 = 1,
+    gameData.reportedDice2 = 2,
     gameData.dice1 = 0,
     gameData.dice2 = 0,
     gameData.currentPlayerId = gameData.alivePlayers[gameData.turnIdx],
@@ -194,7 +207,8 @@ const initGame = async (socket, io, req) => {
       clients: clientInfo,
       currentPlayerId: gameData.currentPlayerId,
       prevPlayerId: gameData.prevPlayerId,
-      reportedRoll: gameData.reportedRoll,
+      reportedDice1: gameData.reportedDice1,
+      reportedDice2: gameData.reportedDice2,
       dice1: gameData.dice1,
       dice2: gameData.dice2,
       curStage: gameData.curStage,
@@ -222,7 +236,8 @@ const nextRound = async (socket, io, req) => {
     gameData.alivePlayers,
     gameData.deadPlayers,
     gameData.turnIdx = Math.floor(Math.random() * gameData.alivePlayers.length),
-    gameData.reportedRoll = 0,
+    gameData.reportedDice1 = 0,
+    gameData.reportedDice2 = 0,
     gameData.dice1 = 0,
     gameData.dice2 = 0,
     gameData.currentPlayerId = gameData.alivePlayers[gameData.turnIdx],
@@ -244,7 +259,8 @@ const nextRound = async (socket, io, req) => {
       clients: clientInfo,
       currentPlayerId: gameData.currentPlayerId,
       prevPlayerId: gameData.prevPlayerId,
-      reportedRoll: gameData.reportedRoll,
+      reportedDice1: gameData.reportedDice1,
+      reportedDice2: gameData.reportedDice2,
       dice1: gameData.dice1,
       dice2: gameData.dice2,
       curStage: gameData.curStage,
@@ -260,7 +276,6 @@ const rollDice = async (socket, io, req) => {
     });
     return;
   }
-
   const gameData = await gameService.getGame(req.gameId);
   if (req.id !== gameData.currentPlayerId) {
     socket.emit('rollDice', {
@@ -277,7 +292,8 @@ const rollDice = async (socket, io, req) => {
     gameData.alivePlayers,
     gameData.deadPlayers,
     gameData.turnIdx,
-    gameData.reportedRoll,
+    gameData.reportedDice1,
+    gameData.reportedDice2,
     gameData.dice1 = Math.ceil(Math.random() * 6),
     gameData.dice2 = Math.ceil(Math.random() * 6),
     gameData.currentPlayerId,
@@ -301,12 +317,125 @@ const rollDice = async (socket, io, req) => {
   });
 };
 
+const declareScore = async (socket, io, req) => {
+  if (!await gameService.existsGame(req.gameId)) {
+    socket.emit('declareScore', {
+      success: false
+    });
+    return;
+  }
+  const gameData = await gameService.getGame(req.gameId);
+  if (req.id !== gameData.currentPlayerId) {
+    socket.emit('declareScore', {
+      success: false
+    });
+    return;
+  }
+
+  if (req.declareType === 'honest') {
+    if (((req.dice1 === gameData.dice1 && req.dice2 === gameData.dice2)
+    || (req.dice1 === gameData.dice2 && req.dice2 === gameData.dice1))
+    && compareRoll(req.dice1, req.dice2, gameData.reportedDice1, gameData.reportedDice2)) {
+      await gameService.updateGame(
+        gameData.gameId,
+        gameData.active,
+        gameData.hostId,
+        gameData.clients,
+        gameData.alivePlayers,
+        gameData.deadPlayers,
+        gameData.turnIdx = (gameData.turnidx + 1) % gameData.alivePlayers.length,
+        gameData.reportedDice1 = req.dice1,
+        gameData.reportedDice2 = req.dice2,
+        gameData.dice1,
+        gameData.dice2,
+        gameData.currentPlayerId = gameData.alivePlayers[gameData.turnIdx],
+        gameData.prevPlayerId = req.id,
+        gameData.MIN_NUM_PLAYERS,
+        gameData.MAX_NUM_PLAYERS,
+        gameData.curStage = 'accept-stage',
+        gameData.turnResult = 'honest',
+        gameData.pressedOk = 0,
+      );
+      socket.emit('declareScore', {
+        success: true,
+        reportedDice1: gameData.reportedDice1,
+        reportedDice2: gameData.reportedDice2,
+        currentPlayerId: gameData.currentPlayerId,
+        prevPlayerId: gameData.prevPlayerId,
+        curStage: gameData.curStage,
+      });
+      gameData.clients.forEach((id) => {
+        socket.to(id).emit('declareScoreOther', {
+          reportedDice1: gameData.reportedDice1,
+          reportedDice2: gameData.reportedDice2,
+          currentPlayerId: gameData.currentPlayerId,
+          prevPlayerId: gameData.prevPlayerId,
+          curStage: gameData.curStage
+        });
+      });
+    } else {
+      socket.emit('declareScore', {
+        success: false
+      });
+    }
+  } else if (req.declareType === 'bluff') {
+    if (compareRoll(req.dice1, req.dice2, gameData.reportedDice1, gameData.reportedDice2)) {
+      await gameService.updateGame(
+        gameData.gameId,
+        gameData.active,
+        gameData.hostId,
+        gameData.clients,
+        gameData.alivePlayers,
+        gameData.deadPlayers,
+        gameData.turnIdx = (gameData.turnidx + 1) % gameData.alivePlayers.length,
+        gameData.reportedDice1 = req.dice1,
+        gameData.reportedDice2 = req.dice2,
+        gameData.dice1,
+        gameData.dice2,
+        gameData.currentPlayerId = gameData.alivePlayers[gameData.turnIdx],
+        gameData.prevPlayerId = req.id,
+        gameData.MIN_NUM_PLAYERS,
+        gameData.MAX_NUM_PLAYERS,
+        gameData.curStage = 'accept-stage',
+        gameData.turnResult = 'bluff',
+        gameData.pressedOk = 0,
+      );
+      socket.emit('declareScore', {
+        success: true,
+        reportedDice1: gameData.reportedDice1,
+        reportedDice2: gameData.reportedDice2,
+        currentPlayerId: gameData.currentPlayerId,
+        prevPlayerId: gameData.prevPlayerId,
+        curStage: gameData.curStage,
+      });
+      gameData.clients.forEach((id) => {
+        socket.to(id).emit('declareScoreOther', {
+          reportedDice1: gameData.reportedDice1,
+          reportedDice2: gameData.reportedDice2,
+          currentPlayerId: gameData.currentPlayerId,
+          prevPlayerId: gameData.prevPlayerId,
+          curStage: gameData.curStage
+        });
+      });
+    } else {
+      socket.emit('declareScore', {
+        success: false
+      });
+    }
+  } else {
+    socket.emit('declareScore', {
+      success: false
+    });
+  }
+};
+
 const gameController = {
   createGame,
   joinGame,
   initGame,
   nextRound,
   rollDice,
+  declareScore
 };
 
 export default gameController;

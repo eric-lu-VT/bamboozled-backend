@@ -17,6 +17,9 @@ export const gameRouter = async (socket, io, req) => {
     case 'rollDice':
       await gameController.rollDice(socket, io, req);
       break;
+    case 'declareScore':
+      await gameController.declareScore(socket, io, req);
+      break;
     default:
       break;
   }
