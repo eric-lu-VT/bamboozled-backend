@@ -20,6 +20,9 @@ export const gameRouter = async (socket, io, req) => {
     case 'declareScore':
       await gameController.declareScore(socket, io, req);
       break;
+    case 'acceptAttempt':
+      await gameController.acceptAttempt(socket, io, req);
+      break;
     default:
       break;
   }

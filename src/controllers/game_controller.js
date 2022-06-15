@@ -19,6 +19,7 @@ function compareRoll(d1, d2, rd1, rd2) {
   if (rd1 === rd2) {
     return (d1 === d2) && (d1 >= rd1);
   }
+  if (d1 === d2 && rd1 !== rd2) return true;
   return (10 * d1 + d2 >= 10 * rd1 + rd2);
 }
 
@@ -49,8 +50,8 @@ const createGame = async (socket, io, req) => {
     req.id, // id
     req.username, // username
     gameId, // gameId
-    0, // lives
-    false // alive
+    0, // strikes
+    true // alive
   );
 
   socket.join(req.id);
@@ -62,8 +63,8 @@ const createGame = async (socket, io, req) => {
     clients: {
       [req.id]: {
         username: req.username,
-        lives: 0,
-        alive: false,
+        strikes: 0,
+        alive: true,
       }
     }
   });
@@ -84,7 +85,6 @@ const joinGame = async (socket, io, req) => {
     || gameData.clients.includes(req.id)
   ) {
     // reconnect
-    console.log('reconnect attempt');
     if (gameData.clients.includes(req.id)) {
       socket.join(req.id);
       socket.emit('gameReconnect', {
@@ -110,7 +110,6 @@ const joinGame = async (socket, io, req) => {
     }
   } else {
     // new user connecting
-    console.log('new user connecting attempt');
     await gameService.updateGame(
       gameData.gameId,
       gameData.active,
@@ -136,7 +135,7 @@ const joinGame = async (socket, io, req) => {
       req.id, // id
       req.username, // username
       req.gameId, // gameId
-      0, // lives
+      0, // strikes
       false // alive
     );
 
@@ -202,8 +201,8 @@ const initGame = async (socket, io, req) => {
       success: true,
       gameId: req.gameId,
       active: gameData.active,
-      isHost: (req.id === gameData.hostId),
-      isTurn: (req.id === gameData.currentPlayerId),
+      isHost: (id === gameData.hostId),
+      isTurn: (id === gameData.currentPlayerId),
       clients: clientInfo,
       currentPlayerId: gameData.currentPlayerId,
       prevPlayerId: gameData.prevPlayerId,
@@ -254,8 +253,8 @@ const nextRound = async (socket, io, req) => {
       success: true,
       gameId: req.gameId,
       active: gameData.active,
-      isHost: (req.id === gameData.hostId),
-      isTurn: (req.id === gameData.currentPlayerId),
+      isHost: (id === gameData.hostId),
+      isTurn: (id === gameData.currentPlayerId),
       clients: clientInfo,
       currentPlayerId: gameData.currentPlayerId,
       prevPlayerId: gameData.prevPlayerId,
@@ -343,7 +342,7 @@ const declareScore = async (socket, io, req) => {
         gameData.clients,
         gameData.alivePlayers,
         gameData.deadPlayers,
-        gameData.turnIdx = (gameData.turnidx + 1) % gameData.alivePlayers.length,
+        gameData.turnIdx = (gameData.turnIdx + 1) % gameData.alivePlayers.length,
         gameData.reportedDice1 = req.dice1,
         gameData.reportedDice2 = req.dice2,
         gameData.dice1,
@@ -387,7 +386,7 @@ const declareScore = async (socket, io, req) => {
         gameData.clients,
         gameData.alivePlayers,
         gameData.deadPlayers,
-        gameData.turnIdx = (gameData.turnidx + 1) % gameData.alivePlayers.length,
+        gameData.turnIdx = (gameData.turnIdx + 1) % gameData.alivePlayers.length,
         gameData.reportedDice1 = req.dice1,
         gameData.reportedDice2 = req.dice2,
         gameData.dice1,
@@ -429,13 +428,115 @@ const declareScore = async (socket, io, req) => {
   }
 };
 
+const acceptAttempt = async (socket, io, req) => {
+  if (!await gameService.existsGame(req.gameId)) {
+    socket.emit('acceptAttempt', {
+      success: false
+    });
+    return;
+  }
+  const gameData = await gameService.getGame(req.gameId);
+  const clientInfo = await gameService.getClientInfo(req.gameId);
+  if (req.id !== gameData.currentPlayerId) {
+    socket.emit('acceptAttempt', {
+      success: false
+    });
+    return;
+  }
+
+  if (req.declareType === 'accept' || req.declareType === 'call') {
+    gameData.turnResult = `${gameData.turnResult}-${req.declareType}`;
+    gameData.curStage = 'result-stage';
+    if (gameData.turnResult === 'honest-accept') {
+      console.log('nothing happens');
+    } else if (gameData.turnResult === 'honest-call') {
+      clientInfo[gameData.currentPlayerId].strikes += 1;
+      if (clientInfo[gameData.currentPlayerId].strikes === 3) {
+        clientInfo[gameData.currentPlayerId].alive = false;
+        gameData.turnIdx %= (gameData.alivePlayers.length - 1);
+        gameData.currentPlayerId = gameData.alivePlayers[gameData.turnIdx];
+      }
+      await gameService.updateUser(
+        gameData.currentPlayerId, // id
+        clientInfo[gameData.currentPlayerId].username, // username
+        gameData.gameId, // gameId
+        clientInfo[gameData.currentPlayerId].strikes, // strikes
+        clientInfo[gameData.currentPlayerId].alive // alive
+      );
+    } else if (gameData.turnResult === 'bluff-accept') {
+      console.log('add card');
+    } else if (gameData.turnResult === 'bluff-call') {
+      clientInfo[gameData.prevPlayerId].strikes += 1;
+      if (clientInfo[gameData.prevPlayerId].strikes === 3) {
+        clientInfo[gameData.prevPlayerId].alive = false;
+        gameData.turnIdx %= (gameData.alivePlayers.length - 1);
+        gameData.prevPlayerId = gameData.alivePlayers[floorMod(gameData.turnIdx - 1, gameData.alivePlayers.length - 1)];
+      }
+      await gameService.updateUser(
+        gameData.prevPlayerId, // id
+        clientInfo[gameData.prevPlayerId].username, // username
+        gameData.gameId, // gameId
+        clientInfo[gameData.prevPlayerId].strikes, // strikes
+        clientInfo[gameData.prevPlayerId].alive // alive
+      );
+    }
+
+    for (let i = gameData.alivePlayers.length - 1; i >= 0; i -= 1) {
+      if (!clientInfo[gameData.alivePlayers[i]].alive) {
+        gameData.deadPlayers.push(gameData.alivePlayers[i]);
+        gameData.alivePlayers.splice(i, 1);
+      }
+    }
+    await gameService.updateGame( // adjusted accordingly earlier
+      gameData.gameId,
+      gameData.active,
+      gameData.hostId,
+      gameData.clients,
+      gameData.alivePlayers,
+      gameData.deadPlayers,
+      gameData.turnIdx,
+      gameData.reportedDice1,
+      gameData.reportedDice2,
+      gameData.dice1,
+      gameData.dice2,
+      gameData.currentPlayerId,
+      gameData.prevPlayerId,
+      gameData.MIN_NUM_PLAYERS,
+      gameData.MAX_NUM_PLAYERS,
+      gameData.curStage,
+      gameData.turnResult,
+      gameData.pressedOk,
+    );
+    gameData.clients.forEach((id) => {
+      io.to(id).emit('acceptAttempt', {
+        success: true,
+        isTurn: (id === gameData.currentPlayerId),
+        clients: clientInfo,
+        currentPlayerId: gameData.currentPlayerId,
+        prevPlayerId: gameData.prevPlayerId,
+        reportedDice1: gameData.reportedDice1,
+        reportedDice2: gameData.reportedDice2,
+        dice1: gameData.dice1,
+        dice2: gameData.dice2,
+        curStage: gameData.curStage,
+        turnResult: gameData.turnResult,
+      });
+    });
+  } else {
+    socket.emit('acceptAttempt', {
+      success: false
+    });
+  }
+};
+
 const gameController = {
   createGame,
   joinGame,
   initGame,
   nextRound,
   rollDice,
-  declareScore
+  declareScore,
+  acceptAttempt,
 };
 
 export default gameController;

@@ -65,20 +65,20 @@ const updateUser = async (
   id,
   username,
   gameId,
-  lives,
+  strikes,
   alive
 ) => {
   await redisClient.hset(id, {
     gameId,
     username,
-    lives,
+    strikes,
     alive,
   });
 };
 
 const getUser = async (id) => {
   const userData = await redisClient.hgetall(id);
-  userData.lives = parseInt(userData.lives, 10);
+  userData.strikes = parseInt(userData.strikes, 10);
   userData.alive = (userData.alive === 'true');
 
   return userData;
@@ -92,7 +92,7 @@ const getClientInfo = async (gameId) => { // gets ALL client info in a given gam
     await getUser(userId).then((userData) => {
       res[userId] = {
         username: userData.username,
-        lives: userData.lives,
+        strikes: userData.strikes,
         alive: userData.alive
       };
     });
