@@ -8,7 +8,8 @@ const updateGame = async (
   alivePlayers,
   deadPlayers,
   turnIdx,
-  reportedRoll,
+  reportedDice1,
+  reportedDice2,
   dice1,
   dice2,
   currentPlayerId,
@@ -27,7 +28,8 @@ const updateGame = async (
     alivePlayers: JSON.stringify(alivePlayers),
     deadPlayers: JSON.stringify(deadPlayers),
     turnIdx,
-    reportedRoll,
+    reportedDice1,
+    reportedDice2,
     dice1,
     dice2,
     currentPlayerId,
@@ -47,7 +49,8 @@ const getGame = async (gameId) => {
   gameData.alivePlayers = JSON.parse(gameData.alivePlayers);
   gameData.deadPlayers = JSON.parse(gameData.deadPlayers);
   gameData.turnIdx = parseInt(gameData.turnIdx, 10);
-  gameData.reportedRoll = parseInt(gameData.reportedRoll, 10);
+  gameData.reportedDice1 = parseInt(gameData.reportedDice1, 10);
+  gameData.reportedDice2 = parseInt(gameData.reportedDice2, 10);
   gameData.dice1 = parseInt(gameData.dice1, 10);
   gameData.dice2 = parseInt(gameData.dice2, 10);
   gameData.MIN_NUM_PLAYERS = parseInt(gameData.MIN_NUM_PLAYERS, 10);
