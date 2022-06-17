@@ -23,6 +23,9 @@ export const gameRouter = async (socket, io, req) => {
     case 'acceptAttempt':
       await gameController.acceptAttempt(socket, io, req);
       break;
+    case 'handleOk':
+      await gameController.handleOk(socket, io, req);
+      break;
     default:
       break;
   }

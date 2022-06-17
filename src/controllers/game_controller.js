@@ -102,6 +102,7 @@ const joinGame = async (socket, io, req) => {
         dice2: gameData.dice2,
         curStage: gameData.curStage,
         turnResult: gameData.turnResult,
+        pressedOk: gameData.pressedOk,
       });
     } else {
       socket.emit('gameReconnect', {
@@ -193,7 +194,7 @@ const initGame = async (socket, io, req) => {
     gameData.MAX_NUM_PLAYERS,
     gameData.curStage = 'before-roll-stage',
     gameData.turnResult = '',
-    gameData.pressedOk = 0,
+    gameData.pressedOk = gameData.alivePlayers.length,
   );
 
   gameData.clients.forEach((id) => {
@@ -212,6 +213,7 @@ const initGame = async (socket, io, req) => {
       dice2: gameData.dice2,
       curStage: gameData.curStage,
       turnResult: gameData.turnResult,
+      pressedOk: gameData.pressedOk,
     });
   });
 };
@@ -226,6 +228,22 @@ const nextRound = async (socket, io, req) => {
 
   const gameData = await gameService.getGame(req.gameId);
   const clientInfo = await gameService.getClientInfo(req.gameId);
+  gameData.turnIdx = (gameData.turnIdx + 1) % (gameData.alivePlayers.length);
+  if (clientInfo[gameData.prevPlayerId].alive && clientInfo[gameData.currentPlayerId]) {
+    gameData.prevPlayerId = gameData.currentPlayerId;
+    gameData.currentPlayerId = gameData.alivePlayers[gameData.turnIdx];
+  } else if (clientInfo[gameData.prevPlayerId].alive && !clientInfo[gameData.currentPlayerId]) {
+    // prevPlayer remains the same
+    gameData.currentPlayerId = gameData.alivePlayers[gameData.turnIdx];
+  } else if (!clientInfo[gameData.prevPlayerId].alive && clientInfo[gameData.currentPlayerId]) {
+    gameData.prevPlayerId = gameData.alivePlayers[floorMod(gameData.turnIdx - 2, gameData.alivePlayers.length)];
+    gameData.currentPlayerId = gameData.alivePlayers[gameData.turnIdx];
+  }
+
+  if (gameData.turnResult.includes('call')) {
+    gameData.reportedDice1 = 1;
+    gameData.reportedDice2 = 2;
+  }
 
   await gameService.updateGame(
     gameData.gameId,
@@ -234,18 +252,18 @@ const nextRound = async (socket, io, req) => {
     gameData.clients,
     gameData.alivePlayers,
     gameData.deadPlayers,
-    gameData.turnIdx = Math.floor(Math.random() * gameData.alivePlayers.length),
-    gameData.reportedDice1 = 0,
-    gameData.reportedDice2 = 0,
+    gameData.turnIdx, // set above
+    gameData.reportedDice1, // set above
+    gameData.reportedDice2, // set above
     gameData.dice1 = 0,
     gameData.dice2 = 0,
-    gameData.currentPlayerId = gameData.alivePlayers[gameData.turnIdx],
-    gameData.prevPlayerId = gameData.alivePlayers[floorMod(gameData.turnIdx - 1, gameData.alivePlayers.length)],
+    gameData.currentPlayerId, // set above
+    gameData.prevPlayerId, // set above
     gameData.MIN_NUM_PLAYERS,
     gameData.MAX_NUM_PLAYERS,
     gameData.curStage = 'before-roll-stage',
     gameData.turnResult = '',
-    gameData.pressedOk = 0,
+    gameData.pressedOk = gameData.alivePlayers.length,
   );
 
   gameData.clients.forEach((id) => {
@@ -264,6 +282,7 @@ const nextRound = async (socket, io, req) => {
       dice2: gameData.dice2,
       curStage: gameData.curStage,
       turnResult: gameData.turnResult,
+      pressedOk: gameData.pressedOk,
     });
   });
 };
@@ -353,7 +372,7 @@ const declareScore = async (socket, io, req) => {
         gameData.MAX_NUM_PLAYERS,
         gameData.curStage = 'accept-stage',
         gameData.turnResult = 'honest',
-        gameData.pressedOk = 0,
+        gameData.pressedOk,
       );
       socket.emit('declareScore', {
         success: true,
@@ -397,7 +416,7 @@ const declareScore = async (socket, io, req) => {
         gameData.MAX_NUM_PLAYERS,
         gameData.curStage = 'accept-stage',
         gameData.turnResult = 'bluff',
-        gameData.pressedOk = 0,
+        gameData.pressedOk,
       );
       socket.emit('declareScore', {
         success: true,
@@ -453,8 +472,6 @@ const acceptAttempt = async (socket, io, req) => {
       clientInfo[gameData.currentPlayerId].strikes += 1;
       if (clientInfo[gameData.currentPlayerId].strikes === 3) {
         clientInfo[gameData.currentPlayerId].alive = false;
-        gameData.turnIdx %= (gameData.alivePlayers.length - 1);
-        gameData.currentPlayerId = gameData.alivePlayers[gameData.turnIdx];
       }
       await gameService.updateUser(
         gameData.currentPlayerId, // id
@@ -469,8 +486,6 @@ const acceptAttempt = async (socket, io, req) => {
       clientInfo[gameData.prevPlayerId].strikes += 1;
       if (clientInfo[gameData.prevPlayerId].strikes === 3) {
         clientInfo[gameData.prevPlayerId].alive = false;
-        gameData.turnIdx %= (gameData.alivePlayers.length - 1);
-        gameData.prevPlayerId = gameData.alivePlayers[floorMod(gameData.turnIdx - 1, gameData.alivePlayers.length - 1)];
       }
       await gameService.updateUser(
         gameData.prevPlayerId, // id
@@ -486,6 +501,9 @@ const acceptAttempt = async (socket, io, req) => {
         gameData.deadPlayers.push(gameData.alivePlayers[i]);
         gameData.alivePlayers.splice(i, 1);
       }
+    }
+    if (gameData.alivePlayers.length === 0) { // temp - is 1 in production
+      gameData.active = false;
     }
     await gameService.updateGame( // adjusted accordingly earlier
       gameData.gameId,
@@ -510,6 +528,7 @@ const acceptAttempt = async (socket, io, req) => {
     gameData.clients.forEach((id) => {
       io.to(id).emit('acceptAttempt', {
         success: true,
+        active: gameData.active,
         isTurn: (id === gameData.currentPlayerId),
         clients: clientInfo,
         currentPlayerId: gameData.currentPlayerId,
@@ -529,6 +548,47 @@ const acceptAttempt = async (socket, io, req) => {
   }
 };
 
+const handleOk = async (socket, io, req) => { // todo: only allow request once a round
+  if (!await gameService.existsGame(req.gameId)) {
+    socket.emit('handleOk', {
+      success: false
+    });
+    return;
+  }
+
+  const gameData = await gameService.getGame(req.gameId);
+  await gameService.updateGame( // adjusted accordingly earlier
+    gameData.gameId,
+    gameData.active,
+    gameData.hostId,
+    gameData.clients,
+    gameData.alivePlayers,
+    gameData.deadPlayers,
+    gameData.turnIdx,
+    gameData.reportedDice1,
+    gameData.reportedDice2,
+    gameData.dice1,
+    gameData.dice2,
+    gameData.currentPlayerId,
+    gameData.prevPlayerId,
+    gameData.MIN_NUM_PLAYERS,
+    gameData.MAX_NUM_PLAYERS,
+    gameData.curStage,
+    gameData.turnResult,
+    gameData.pressedOk -= 1,
+  );
+  if (gameData.pressedOk === 0) {
+    await nextRound(socket, io, req);
+  } else {
+    gameData.clients.forEach((id) => {
+      io.to(id).emit('handleOk', {
+        success: true,
+        pressedOk: gameData.pressedOk,
+      });
+    });
+  }
+};
+
 const gameController = {
   createGame,
   joinGame,
@@ -537,6 +597,7 @@ const gameController = {
   rollDice,
   declareScore,
   acceptAttempt,
+  handleOk,
 };
 
 export default gameController;
