@@ -1,6 +1,6 @@
 import redisClient from '../redis';
 
-const updateGame = async (
+const updateGame = async ({
   gameId,
   active,
   hostId,
@@ -19,7 +19,7 @@ const updateGame = async (
   curStage,
   turnResult,
   pressedOk
-) => {
+}) => {
   await redisClient.hset(gameId, {
     gameId,
     active,
@@ -61,13 +61,13 @@ const getGame = async (gameId) => {
 
 const existsGame = async (gameId) => await redisClient.exists(gameId) === 1;
 
-const updateUser = async (
+const updateUser = async ({
   id,
   username,
   gameId,
   strikes,
   alive
-) => {
+}) => {
   await redisClient.hset(id, {
     gameId,
     username,
