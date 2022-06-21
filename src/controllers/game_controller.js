@@ -33,6 +33,7 @@ const createGame = async (socket, io, req) => {
     clients: [req.id],
     alivePlayers: [],
     deadPlayers: [],
+    actionCardDeck: [],
     turnIdx: '0',
     reportedDice1: '1',
     reportedDice2: '2',
@@ -52,6 +53,8 @@ const createGame = async (socket, io, req) => {
     gameId,
     strikes: 0,
     alive: true,
+    beforeActionCards: [],
+    afterActionCards: [],
   });
 
   socket.join(req.id);
@@ -79,6 +82,7 @@ const joinGame = async (socket, io, req) => {
   }
   const gameData = await gameService.getGame(req.gameId);
   let clientInfo = await gameService.getClientInfo(req.gameId);
+  const userData = await gameService.getUser(req.id);
 
   if (gameData.active === 'true'
     || gameData.MAX_NUM_PLAYERS <= gameData.clients.length
@@ -103,6 +107,9 @@ const joinGame = async (socket, io, req) => {
         curStage: gameData.curStage,
         turnResult: gameData.turnResult,
         pressedOk: gameData.pressedOk,
+        beforeActionCards: userData.beforeActionCards,
+        afterActionCards: userData.afterActionCards,
+        curCard: gameData.curCard,
       });
     } else {
       socket.emit('gameReconnect', {
@@ -122,6 +129,8 @@ const joinGame = async (socket, io, req) => {
       gameId: req.gameId,
       strikes: 0,
       alive: false,
+      beforeActionCards: [],
+      afterActionCards: [],
     });
 
     clientInfo = await gameService.getClientInfo(req.gameId);
@@ -164,6 +173,10 @@ const initGame = async (socket, io, req) => {
     ...gameData,
     active: gameData.active = true,
     alivePlayers: gameData.alivePlayers = gameData.clients,
+    actionCardDeck: ['jackpot', 'double', 'double', 'up_down', 'up_down', 'up_down',
+      'fresh_start', 'fresh_start', 'fresh_start', 'fresh_start', 'reverse', 'reverse',
+      'reverse', 'reverse', 'my_bad', 'my_bad', 'my_bad', 'my_bad', 'revive', 'revive',
+      'revive', 'revive', 'skip', 'skip', 'skip', 'skip'],
     turnIdx: gameData.turnIdx = Math.floor(Math.random() * gameData.alivePlayers.length),
     reportedDice1: gameData.reportedDice1 = 1,
     reportedDice2: gameData.reportedDice2 = 2,
@@ -176,25 +189,29 @@ const initGame = async (socket, io, req) => {
     pressedOk: gameData.pressedOk = gameData.alivePlayers.length,
   });
 
-  gameData.clients.forEach((id) => {
-    io.to(id).emit('initGame', {
-      success: true,
-      gameId: req.gameId,
-      active: gameData.active,
-      isHost: (id === gameData.hostId),
-      isTurn: (id === gameData.currentPlayerId),
-      clients: clientInfo,
-      currentPlayerId: gameData.currentPlayerId,
-      prevPlayerId: gameData.prevPlayerId,
-      reportedDice1: gameData.reportedDice1,
-      reportedDice2: gameData.reportedDice2,
-      dice1: gameData.dice1,
-      dice2: gameData.dice2,
-      curStage: gameData.curStage,
-      turnResult: gameData.turnResult,
-      pressedOk: gameData.pressedOk,
+  await Promise.all(gameData.clients.map(async (id) => { // might be anti-pattern?
+    await gameService.getUser(id).then((userData) => {
+      io.to(id).emit('initGame', {
+        success: true,
+        gameId: req.gameId,
+        active: gameData.active,
+        isHost: (id === gameData.hostId),
+        isTurn: (id === gameData.currentPlayerId),
+        clients: clientInfo,
+        currentPlayerId: gameData.currentPlayerId,
+        prevPlayerId: gameData.prevPlayerId,
+        reportedDice1: gameData.reportedDice1,
+        reportedDice2: gameData.reportedDice2,
+        dice1: gameData.dice1,
+        dice2: gameData.dice2,
+        curStage: gameData.curStage,
+        turnResult: gameData.turnResult,
+        pressedOk: gameData.pressedOk,
+        beforeActionCards: userData.beforeActionCards,
+        afterActionCards: userData.afterActionCards,
+      });
     });
-  });
+  }));
 };
 
 const nextRound = async (socket, io, req) => {
@@ -231,6 +248,7 @@ const nextRound = async (socket, io, req) => {
     curStage: gameData.curStage = 'before-roll-stage',
     turnResult: gameData.turnResult = '',
     pressedOk: gameData.pressedOk = gameData.alivePlayers.length,
+    curCard: '',
     // turnIdx, // set above
     // reportedDice1, // set above
     // reportedDice2, // set above
@@ -238,25 +256,119 @@ const nextRound = async (socket, io, req) => {
     // prevPlayerId, // set above
   });
 
-  gameData.clients.forEach((id) => {
-    io.to(id).emit('nextRound', {
-      success: true,
-      gameId: req.gameId,
-      active: gameData.active,
-      isHost: (id === gameData.hostId),
-      isTurn: (id === gameData.currentPlayerId),
-      clients: clientInfo,
-      currentPlayerId: gameData.currentPlayerId,
-      prevPlayerId: gameData.prevPlayerId,
-      reportedDice1: gameData.reportedDice1,
-      reportedDice2: gameData.reportedDice2,
-      dice1: gameData.dice1,
-      dice2: gameData.dice2,
-      curStage: gameData.curStage,
-      turnResult: gameData.turnResult,
-      pressedOk: gameData.pressedOk,
+  await Promise.all(gameData.clients.map(async (id) => { // might be anti-pattern?
+    await gameService.getUser(id).then((userData) => {
+      io.to(id).emit('initGame', {
+        success: true,
+        gameId: req.gameId,
+        active: gameData.active,
+        isHost: (id === gameData.hostId),
+        isTurn: (id === gameData.currentPlayerId),
+        clients: clientInfo,
+        currentPlayerId: gameData.currentPlayerId,
+        prevPlayerId: gameData.prevPlayerId,
+        reportedDice1: gameData.reportedDice1,
+        reportedDice2: gameData.reportedDice2,
+        dice1: gameData.dice1,
+        dice2: gameData.dice2,
+        curStage: gameData.curStage,
+        turnResult: gameData.turnResult,
+        pressedOk: gameData.pressedOk,
+        beforeActionCards: userData.beforeActionCards,
+        afterActionCards: userData.afterActionCards,
+      });
     });
+  }));
+};
+
+const useCard = async (socket, io, req) => {
+  if (!await gameService.existsGame(req.gameId)) {
+    socket.emit('useCard', {
+      success: false
+    });
+    return;
+  }
+
+  let success = true;
+  const gameData = await gameService.getGame(req.gameId);
+  const clientInfo = await gameService.getClientInfo(req.gameId);
+  const userData = await gameService.getUser(req.id);
+  if (req.cardType === 'before') {
+    if (req.cardName === 'fresh_start' && userData.beforeActionCards.some((e) => e === 'fresh_start')) {
+      gameData.reportedDice1 = '1';
+      gameData.reportedDice2 = '2';
+      gameData.curCard = 'fresh_start';
+      userData.beforeActionCards.splice(userData.beforeActionCards.indexOf('fresh_start'), 1);
+    } else if (req.cardName === 'reverse' && userData.beforeActionCards.some((e) => e === 'reverse')) {
+      gameData.turnIdx = gameData.alivePlayers.length - 1 - gameData.turnIdx;
+      gameData.alivePlayers = gameData.alivePlayers.reverse();
+      gameData.curCard = 'reverse';
+      userData.beforeActionCards.splice(userData.beforeActionCards.indexOf('reverse'), 1);
+    } else if (req.cardName === 'my_bad' && userData.beforeActionCards.some((e) => e === 'my_bad')) {
+      userData.isMyBadActive = true;
+      clientInfo[gameData.currentPlayerId].isMyBadActive = true;
+      gameData.curCard = 'my_bad';
+      userData.beforeActionCards.splice(userData.beforeActionCards.indexOf('my_bad'), 1);
+    } else if (req.cardName === 'revive' && userData.beforeActionCards.some((e) => e === 'revive')) {
+      if (userData.strikes > 0) {
+        userData.strikes -= 1;
+        clientInfo[gameData.currentPlayerId].strikes = userData.strikes;
+        gameData.curCard = 'revive';
+        userData.beforeActionCards.splice(userData.beforeActionCards.indexOf('revive'), 1);
+      } else {
+        success = false;
+      }
+    } else if (req.cardName === 'skip' && userData.beforeActionCards.some((e) => e === 'skip')) {
+      gameData.turnIdx = (gameData.turnIdx + 1) % gameData.alivePlayers.length;
+      gameData.currentPlayerId = gameData.alivePlayers[gameData.turnIdx];
+      gameData.curCard = 'skip';
+      userData.beforeActionCards.splice(userData.beforeActionCards.indexOf('skip'), 1);
+    } else {
+      success = false;
+    }
+  } else if (req.cardType === 'after') {
+    // todo
+  } else {
+    success = false;
+  }
+  if (!success) {
+    socket.emit('useCard', {
+      success: false
+    });
+  }
+
+  gameData.curStage = 'use-card-stage';
+  await gameService.updateGame({
+    ...gameData
   });
+  await gameService.updateUser({
+    ...userData,
+    id: gameData.currentPlayerId,
+  });
+  await Promise.all(gameData.clients.map(async (id) => { // might be anti-pattern?
+    await gameService.getUser(id).then((userData) => {
+      io.to(id).emit('useCard', {
+        success: true,
+        gameId: req.gameId,
+        active: gameData.active,
+        isHost: (id === gameData.hostId),
+        isTurn: (id === gameData.currentPlayerId),
+        clients: clientInfo,
+        currentPlayerId: gameData.currentPlayerId,
+        prevPlayerId: gameData.prevPlayerId,
+        reportedDice1: gameData.reportedDice1,
+        reportedDice2: gameData.reportedDice2,
+        dice1: gameData.dice1,
+        dice2: gameData.dice2,
+        curStage: gameData.curStage,
+        turnResult: gameData.turnResult,
+        pressedOk: gameData.pressedOk,
+        beforeActionCards: userData.beforeActionCards,
+        afterActionCards: userData.afterActionCards,
+        curCard: gameData.curCard,
+      });
+    });
+  }));
 };
 
 const rollDice = async (socket, io, req) => {
@@ -391,45 +503,53 @@ const acceptAttempt = async (socket, io, req) => {
     return;
   }
   const gameData = await gameService.getGame(req.gameId);
-  const clientInfo = await gameService.getClientInfo(req.gameId);
   if (req.id !== gameData.currentPlayerId) {
     socket.emit('acceptAttempt', {
       success: false
     });
     return;
   }
+  const curUserData = await gameService.getUser(gameData.currentPlayerId);
+  const prevUserData = await gameService.getUser(gameData.prevPlayerId);
+  const clientInfo = await gameService.getClientInfo(req.gameId);
 
   if (req.declareType === 'accept' || req.declareType === 'call') {
     gameData.turnResult = `${gameData.turnResult}-${req.declareType}`;
     gameData.curStage = 'result-stage';
     if (gameData.turnResult === 'honest-accept') {
-      console.log('nothing happens');
+      // console.log('nothing happens');
     } else if (gameData.turnResult === 'honest-call') {
-      clientInfo[gameData.currentPlayerId].strikes += 1;
-      if (clientInfo[gameData.currentPlayerId].strikes === 3) {
-        clientInfo[gameData.currentPlayerId].alive = false;
+      if (clientInfo[gameData.currentPlayerId].isMyBadActive) {
+        clientInfo[gameData.currentPlayerId] = false;
+      } else {
+        clientInfo[gameData.currentPlayerId].strikes += 1;
+        if (clientInfo[gameData.currentPlayerId].strikes === 3) {
+          clientInfo[gameData.currentPlayerId].alive = false;
+        }
       }
-      await gameService.updateUser({
-        id: gameData.currentPlayerId,
-        username: clientInfo[gameData.currentPlayerId].username,
-        gameId: gameData.gameId,
-        strikes: clientInfo[gameData.currentPlayerId].strikes,
-        alive: clientInfo[gameData.currentPlayerId].alive,
-      });
+      curUserData.strikes = clientInfo[gameData.currentPlayerId].strikes;
+      curUserData.alive = clientInfo[gameData.currentPlayerId].alive;
     } else if (gameData.turnResult === 'bluff-accept') {
-      console.log('add card');
-    } else if (gameData.turnResult === 'bluff-call') {
-      clientInfo[gameData.prevPlayerId].strikes += 1;
-      if (clientInfo[gameData.prevPlayerId].strikes === 3) {
-        clientInfo[gameData.prevPlayerId].alive = false;
+      if (gameData.actionCardDeck.length !== 0) {
+        const tempCard = gameData.actionCardDeck.pop();
+        if (tempCard === 'jackpot' || tempCard === 'double' || tempCard === 'up_down') {
+          prevUserData.afterActionCards.push(tempCard);
+        } else {
+          prevUserData.beforeActionCards.push(tempCard);
+        }
+        console.log('here');
       }
-      await gameService.updateUser({
-        id: gameData.prevPlayerId,
-        username: clientInfo[gameData.prevPlayerId].username,
-        gameId: gameData.gameId,
-        strikes: clientInfo[gameData.prevPlayerId].strikes,
-        alive: clientInfo[gameData.prevPlayerId].alive,
-      });
+    } else if (gameData.turnResult === 'bluff-call') {
+      if (clientInfo[gameData.prevPlayerId].isMyBadActive) {
+        clientInfo[gameData.prevPlayerId] = false;
+      } else {
+        clientInfo[gameData.prevPlayerId].strikes += 1;
+        if (clientInfo[gameData.prevPlayerId].strikes === 3) {
+          clientInfo[gameData.prevPlayerId].alive = false;
+        }
+      }
+      prevUserData.strikes = clientInfo[gameData.currentPlayerId].strikes;
+      prevUserData.alive = clientInfo[gameData.currentPlayerId].alive;
     }
 
     for (let i = gameData.alivePlayers.length - 1; i >= 0; i -= 1) {
@@ -444,22 +564,35 @@ const acceptAttempt = async (socket, io, req) => {
     await gameService.updateGame({ // all adjusted accordingly earlier
       ...gameData,
     });
-    gameData.clients.forEach((id) => {
-      io.to(id).emit('acceptAttempt', {
-        success: true,
-        active: gameData.active,
-        isTurn: (id === gameData.currentPlayerId),
-        clients: clientInfo,
-        currentPlayerId: gameData.currentPlayerId,
-        prevPlayerId: gameData.prevPlayerId,
-        reportedDice1: gameData.reportedDice1,
-        reportedDice2: gameData.reportedDice2,
-        dice1: gameData.dice1,
-        dice2: gameData.dice2,
-        curStage: gameData.curStage,
-        turnResult: gameData.turnResult,
-      });
+    await gameService.updateUser({ // all adjusted accordingly earlier
+      ...curUserData,
+      id: gameData.currentPlayerId,
     });
+    await gameService.updateUser({ // all adjusted accordingly earlier
+      ...prevUserData,
+      id: gameData.prevPlayerId,
+    });
+    await Promise.all(gameData.clients.map(async (id) => {
+      await gameService.getUser(id).then((userData) => {
+        console.log(userData);
+        io.to(id).emit('acceptAttempt', {
+          success: true,
+          active: gameData.active,
+          isTurn: (id === gameData.currentPlayerId),
+          clients: clientInfo,
+          currentPlayerId: gameData.currentPlayerId,
+          prevPlayerId: gameData.prevPlayerId,
+          reportedDice1: gameData.reportedDice1,
+          reportedDice2: gameData.reportedDice2,
+          dice1: gameData.dice1,
+          dice2: gameData.dice2,
+          curStage: gameData.curStage,
+          turnResult: gameData.turnResult,
+          beforeActionCards: userData.beforeActionCards,
+          afterActionCards: userData.afterActionCards,
+        });
+      });
+    }));
   } else {
     socket.emit('acceptAttempt', {
       success: false
@@ -497,6 +630,7 @@ const gameController = {
   joinGame,
   initGame,
   nextRound,
+  useCard,
   rollDice,
   declareScore,
   acceptAttempt,

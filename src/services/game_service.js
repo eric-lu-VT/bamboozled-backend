@@ -7,6 +7,7 @@ const updateGame = async ({
   clients,
   alivePlayers,
   deadPlayers,
+  actionCardDeck,
   turnIdx,
   reportedDice1,
   reportedDice2,
@@ -18,7 +19,8 @@ const updateGame = async ({
   MAX_NUM_PLAYERS,
   curStage,
   turnResult,
-  pressedOk
+  pressedOk,
+  curCard,
 }) => {
   await redisClient.hset(gameId, {
     gameId,
@@ -27,6 +29,7 @@ const updateGame = async ({
     clients: JSON.stringify(clients),
     alivePlayers: JSON.stringify(alivePlayers),
     deadPlayers: JSON.stringify(deadPlayers),
+    actionCardDeck: JSON.stringify(actionCardDeck),
     turnIdx,
     reportedDice1,
     reportedDice2,
@@ -39,6 +42,7 @@ const updateGame = async ({
     curStage,
     turnResult,
     pressedOk,
+    curCard,
   });
 };
 
@@ -48,6 +52,7 @@ const getGame = async (gameId) => {
   gameData.clients = JSON.parse(gameData.clients);
   gameData.alivePlayers = JSON.parse(gameData.alivePlayers);
   gameData.deadPlayers = JSON.parse(gameData.deadPlayers);
+  gameData.actionCardDeck = JSON.parse(gameData.actionCardDeck);
   gameData.turnIdx = parseInt(gameData.turnIdx, 10);
   gameData.reportedDice1 = parseInt(gameData.reportedDice1, 10);
   gameData.reportedDice2 = parseInt(gameData.reportedDice2, 10);
@@ -66,13 +71,19 @@ const updateUser = async ({
   username,
   gameId,
   strikes,
-  alive
+  alive,
+  beforeActionCards,
+  afterActionCards,
+  isMyBadActive,
 }) => {
   await redisClient.hset(id, {
     gameId,
     username,
     strikes,
     alive,
+    beforeActionCards: JSON.stringify(beforeActionCards),
+    afterActionCards: JSON.stringify(afterActionCards),
+    isMyBadActive
   });
 };
 
@@ -80,7 +91,9 @@ const getUser = async (id) => {
   const userData = await redisClient.hgetall(id);
   userData.strikes = parseInt(userData.strikes, 10);
   userData.alive = (userData.alive === 'true');
-
+  userData.beforeActionCards = JSON.parse(userData.beforeActionCards);
+  userData.afterActionCards = JSON.parse(userData.afterActionCards);
+  userData.isMyBadActive = (userData.isMyBadActive === 'true');
   return userData;
 };
 
@@ -93,7 +106,8 @@ const getClientInfo = async (gameId) => { // gets ALL client info in a given gam
       res[userId] = {
         username: userData.username,
         strikes: userData.strikes,
-        alive: userData.alive
+        alive: userData.alive,
+        isMyBadActive: userData.isMyBadActive,
       };
     });
   }));
