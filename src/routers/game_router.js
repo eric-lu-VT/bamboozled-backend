@@ -14,6 +14,9 @@ export const gameRouter = async (socket, io, req) => {
     case 'nextRound':
       await gameController.nextRound(socket, io, req);
       break;
+    case 'useCard':
+      await gameController.useCard(socket, io, req);
+      break;
     case 'rollDice':
       await gameController.rollDice(socket, io, req);
       break;
